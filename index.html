@@ -1,0 +1,815 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Flash FOMO — fast synthetic futures battle</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+/* 19.5 — dark trading-terminal palette */
+:root{
+  --bg:#eef0f4; --panel:#ffffff; --panel2:#f6f7fa; --line:#e3e6ec; --ink:#1c2027;
+  --muted:#7a8396; --green:#10f080; --red:#ee5a52; --amber:#f0a63a; --accent:#3f6fb5;
+}
+[data-theme="dark"]{
+  --bg:#080b0f; --panel:#0d1117; --panel2:#161c24; --line:#1f2937; --ink:#f0f6fc;
+  --muted:#8b949e; --green:#00ff66; --red:#ff3355; --amber:#ffb800; --accent:#00e5ff;
+  --neon-glow: 0 0 12px rgba(0, 255, 102, 0.45);
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body{height:100%;font-family:'Quicksand',sans-serif;background:var(--bg);color:var(--ink);}
+body{display:flex;flex-direction:column;overflow:hidden;transition:background .3s;}
+/* ---------- HEADER (19.5) ---------- */
+header{display:flex;align-items:center;gap:10px;padding:7px 14px;background:var(--panel);border-bottom:1px solid var(--line);flex-wrap:wrap;flex-shrink:0;}
+header .hstat{display:flex;align-items:center;gap:4px;}
+.logo{font-weight:800;font-size:18px;letter-spacing:.4px;display:flex;align-items:center;gap:3px;white-space:nowrap;}
+.logo .bolt{filter:drop-shadow(0 0 6px rgba(243,181,74,.8));}
+.logo .a{color:var(--green);} .logo .b{color:var(--amber);}
+.stat{font-size:11px;line-height:1.1;color:var(--muted);} .stat b{display:block;font-size:15px;color:var(--ink);font-variant-numeric:tabular-nums;}
+.hsep{width:1px;height:26px;background:var(--line);margin:0 2px;}
+.spacer{flex:1;}
+.pill{padding:4px 12px;border-radius:999px;background:var(--panel2);border:1px solid var(--line);font-weight:700;font-size:13px;white-space:nowrap;}
+.pill.warn{background:var(--amber);color:#3a2600;border:none;}
+#timer{font-variant-numeric:tabular-nums;}
+#gameUI{flex:1;display:flex;flex-direction:column;min-height:0;gap:10px;padding:10px;}
+/* ---------- TOP ROW: 3 columns (19.2 / 21) ---------- */
+.top-row{display:flex;gap:10px;flex:1 1 62%;min-height:280px;}
+/* chart column */
+#chartCol{flex:1 1 auto;min-width:0;height:100%;display:flex;flex-direction:column;}
+#chartBox{flex:1;min-height:0;background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden;position:relative;}
+#chart{width:100%;height:100%;display:block;}
+.chartctl{position:absolute;top:6px;right:8px;display:flex;gap:5px;z-index:5;}
+.chartctl .btn-mini{font-size:10px;padding:2px 7px;background:var(--panel2);}
+.chartctl .btn-mini.t-on{background:var(--green);color:#fff;border-color:var(--green);}
+/* 24.4 — TradingView style OHLC strip + last-price tag */
+.tv-strip{position:absolute;top:0;left:0;z-index:5;display:flex;gap:10px;align-items:center;padding:4px 8px;font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums;background:var(--panel);border-bottom:1px solid var(--line);border-right:1px solid var(--line);border-radius:0 0 10px 0;}
+.tv-strip .tv-sym{font-weight:800;color:var(--ink);}
+.tv-strip .tv-chg{font-weight:800;}
+.tv-strip .tv-chg.g{color:var(--green);} .tv-strip .tv-chg.r{color:var(--red);}
+.last-price{position:absolute;right:2px;z-index:6;padding:1px 5px;border-radius:4px;font-size:11px;font-weight:800;font-variant-numeric:tabular-nums;pointer-events:none;}
+.last-price.g{background:var(--green);color:#03140a;} .last-price.r{background:var(--red);color:#2a0608;}
+/* orderbook column (ramping, tengah) */
+#obCol{flex:0 0 176px;height:100%;min-width:0;}
+.ob-card{height:100%;display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:8px 10px;}
+.ob-header{display:flex;justify-content:space-between;align-items:center;font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:4px;font-weight:700;}
+.ob-header .mute{color:var(--accent);}
+#newsTicker{font-size:11px;color:var(--accent);padding:2px 0 6px;border-bottom:1px solid var(--line);margin-bottom:6px;min-height:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+#obBody{flex:1;overflow-y:auto;min-height:0;display:flex;flex-direction:column;gap:1px;font-size:11px;}
+.ob-row{display:flex;justify-content:space-between;padding:1px 4px;border-radius:3px;position:relative;font-variant-numeric:tabular-nums;}
+.ob-row .bg{position:absolute;right:0;top:0;bottom:0;opacity:.13;}
+.ob-row span{position:relative;z-index:1;}
+.ob-mid{text-align:center;font-size:11px;padding:3px 0;margin:2px 0;border-top:1px dashed var(--line);border-bottom:1px dashed var(--line);}
+.ob-mid b{font-size:13px;}
+.ob-count{text-align:center;font-size:10px;color:var(--muted);padding-bottom:2px;}
+/* trade column (kanan) */
+#tradeCol{flex:0 0 282px;height:100%;}
+.trade-card{height:100%;display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px;overflow-y:auto;}
+.trade-header h4{font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:8px;}
+.seg{display:flex;background:var(--panel2);border-radius:10px;overflow:hidden;margin-bottom:10px;}
+.seg button{flex:1;padding:9px;border:none;cursor:pointer;font-weight:800;font-size:14px;background:transparent;color:var(--muted);}
+.seg button.long.on{background:var(--green);color:#fff;}
+.seg button.short.on{background:var(--red);color:#fff;}
+.row-compact{display:flex;align-items:center;justify-content:space-between;gap:6px;margin:7px 0 2px;}
+.lfield{font-size:11px;color:var(--muted);white-space:nowrap;}
+.chips-row{display:flex;gap:5px;flex-wrap:nowrap;}
+.btn-mini{padding:4px 8px;border:1px solid var(--line);border-radius:8px;cursor:pointer;background:var(--panel2);font-weight:700;font-size:11px;color:var(--ink);white-space:nowrap;}
+.btn-mini.btn-danger{background:var(--red);color:#fff;border-color:var(--red);}
+input[type=range]{width:100%;accent-color:var(--green);margin:2px 0;}
+.amount-box{display:flex;gap:6px;align-items:center;margin-top:6px;}
+.amount-box input{flex:1;padding:8px;border:1px solid var(--line);border-radius:10px;background:var(--panel2);color:var(--ink);font-family:inherit;font-size:14px;}
+.amount-box .usd{font-size:11px;color:var(--muted);font-weight:700;}
+.clr-sub{font-size:11px;color:var(--muted);margin-top:5px;font-variant-numeric:tabular-nums;}
+.limit-row{display:flex;gap:6px;align-items:center;margin-top:8px;}
+.limit-row .btn-mini{font-size:10px;}
+.btn-cta{width:100%;margin-top:10px;padding:12px;border:none;border-radius:12px;font-weight:800;font-size:15px;cursor:pointer;color:#fff;}
+.btn-long{background:var(--green);} .btn-short{background:var(--red);}
+/* ---------- BOTTOM ROW: tab panel (19.2) ---------- */
+.bottom-row{flex:0 0 38%;min-height:180px;max-height:300px;display:flex;}
+.bottom-card{width:100%;height:100%;display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:8px 12px;}
+.bottom-tabs-header{display:flex;justify-content:space-between;align-items:center;gap:8px;border-bottom:1px solid var(--line);padding-bottom:6px;margin-bottom:6px;}
+.tabs-bottom{display:flex;gap:4px;background:transparent;border-radius:8px;overflow:hidden;margin:0;flex-wrap:wrap;}
+.tabs-bottom .tab-btn{padding:6px 12px;border:none;cursor:pointer;font-weight:800;font-size:12px;background:var(--panel2);color:var(--muted);border-radius:8px;}
+.tabs-bottom .tab-btn.on{background:var(--accent);color:#fff;}
+.tab-content{flex:1;overflow-y:auto;min-height:0;}
+.scrollable-tab-list{display:flex;flex-direction:column;gap:4px;}
+table{width:100%;border-collapse:collapse;font-size:12.5px;}
+th,td{padding:5px 8px;text-align:right;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums;white-space:nowrap;}
+th{color:var(--muted);font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.5px;}
+td:first-child,th:first-child{text-align:left;}
+.g{color:var(--green);} .r{color:var(--red);}
+.liq{color:#f39c12;font-weight:800;}
+.pending-box{border-top:1px solid var(--line);padding-top:8px;}
+.pending-row{display:flex;justify-content:space-between;align-items:center;font-size:12px;padding:4px 6px;border-bottom:1px solid var(--line);gap:6px;font-variant-numeric:tabular-nums;}
+.pending-row:last-child{border-bottom:none;}
+.mute{color:var(--muted);}
+.mute-empty{padding:14px;text-align:center;color:var(--muted);font-size:12.5px;}
+.pos-table td{padding:6px 8px;}
+.pos-table tr:hover{background:var(--panel2);}
+.hist-sum{font-size:12px;color:var(--muted);padding:4px 0;border-bottom:1px solid var(--line);margin-bottom:6px;}
+.hist-row{display:flex;justify-content:space-between;align-items:center;font-size:12px;padding:3px 0;border-bottom:1px solid var(--line);gap:6px;flex-wrap:wrap;}
+.round-row{display:flex;justify-content:space-between;align-items:center;font-size:12px;padding:3px 0;border-bottom:1px solid var(--line);gap:6px;flex-wrap:wrap;}
+.pos-card{border:1px solid var(--line);border-radius:10px;padding:8px;background:var(--panel2);font-size:12.5px;}
+/* ---------- shared overlays ---------- */
+#board{position:fixed;inset:0;z-index:40;background:rgba(5,8,14,.72);display:none;align-items:center;justify-content:center;backdrop-filter:blur(4px);}
+.card-big{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:28px 38px;max-width:440px;width:92%;text-align:center;box-shadow:0 22px 60px rgba(0,0,0,.45);}
+.card-big h2{font-size:28px;margin-bottom:8px;}
+.card-big p{color:var(--muted);font-size:14px;line-height:1.55;margin:6px 0;}
+.btn-lg{padding:12px 34px;border:none;border-radius:12px;font-weight:800;font-size:16px;cursor:pointer;color:#fff;background:var(--green);margin-top:12px;}
+.full{position:fixed;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;background:var(--bg);}
+.full.hidden{display:none;}
+.menu{background:var(--panel);border:1px solid var(--line);border-radius:22px;padding:32px 40px;width:min(430px,90%);text-align:center;box-shadow:0 24px 70px rgba(0,0,0,.35);}
+.menu h1{font-size:40px;letter-spacing:.5px;margin-bottom:4px;}
+.menu .sub{color:var(--muted);font-size:14px;margin-bottom:20px;}
+.menu input{width:100%;padding:11px;border:1px solid var(--line);border-radius:11px;background:var(--panel2);color:var(--ink);font-family:inherit;font-size:15px;margin-bottom:12px;text-align:center;}
+.menu .btn-w{width:100%;padding:12px;border:none;border-radius:12px;font-weight:800;font-size:16px;cursor:pointer;color:#fff;background:var(--green);}
+.menu .theme{display:flex;gap:8px;justify-content:center;margin-top:16px;}
+.loading{text-align:center;}
+.loading .bar{width:min(320px,80vw);height:12px;border-radius:999px;background:var(--panel2);overflow:hidden;margin:16px auto 0;border:1px solid var(--line);}
+.loading .fill{height:100%;width:0%;background:linear-gradient(90deg,var(--green),var(--amber),var(--green));background-size:200% 100%;animation:sheen 1.3s linear infinite;}
+@keyframes sheen{from{background-position:0% 0}to{background-position:200% 0}}
+.big-emoji{font-size:56px;}
+#flash{position:fixed;top:70px;left:50%;transform:translateX(-50%);z-index:70;padding:10px 18px;border-radius:10px;color:#fff;font-weight:800;display:none;box-shadow:0 8px 22px rgba(0,0,0,.25);}
+#roundIntro{position:fixed;inset:0;z-index:50;display:none;align-items:center;justify-content:center;background:rgba(5,8,14,.55);}
+.round-box{text-align:center;color:#fff;}
+.round-box .btn{font-size:64px;font-weight:800;}
+.hidden{display:none!important;}
+/* 19.4 — PnL share modal */
+#pnlShareModal{position:fixed;inset:0;z-index:9999;background:rgba(5,8,14,.7);display:none;align-items:center;justify-content:center;backdrop-filter:blur(4px);}
+.pnl-share-card{width:min(360px,92%);background:linear-gradient(160deg,#141822,#1b2031);border:1px solid #2a3142;border-radius:20px;padding:24px 26px;text-align:center;color:#f0f3f8;position:relative;overflow:hidden;box-shadow:0 24px 70px rgba(0,0,0,.55);}
+.pnl-share-card .watermark{position:absolute;right:-24px;bottom:-30px;font-size:88px;font-weight:800;opacity:.05;color:#fff;letter-spacing:-2px;pointer-events:none;}
+.share-brand{font-size:13px;font-weight:800;letter-spacing:2px;text-transform:uppercase;}
+.share-brand .a{color:#00e676;} .share-brand .b{color:#f3b54a;}
+.share-pct{font-size:46px;font-weight:800;margin:12px 0 4px;font-variant-numeric:tabular-nums;}
+.share-pct.g{color:#00e676;text-shadow:0 0 22px rgba(0,230,118,.45);}
+.share-pct.r{color:#ff5252;text-shadow:0 0 22px rgba(255,82,82,.4);}
+.share-details{margin:12px 0;text-align:left;background:rgba(0,0,0,.25);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:6px;}
+.share-row{display:flex;justify-content:space-between;font-size:13px;color:#9aa7bd;}
+.share-row b{color:#f0f3f8;}
+.share-actions{display:flex;gap:8px;justify-content:center;margin-top:8px;}
+.share-actions .btn-mini{background:#2a3142;border-color:#3a4356;color:#f0f3f8;padding:8px 14px;font-size:12px;}
+.share-tag{font-size:11px;color:#7e8b9f;margin-top:8px;letter-spacing:.5px;}
+/* 19.6 — sound popover */
+.sound-pop{position:absolute;right:44px;top:42px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px;display:none;z-index:90;box-shadow:0 12px 30px rgba(0,0,0,.4);width:200px;}
+body{position:relative;}
+/* 24.6 — laptop: keep 3 columns but allow chart to flex; tie top-row height in vh */
+@media (max-width:1279px) and (min-width:1024px){
+  .top-row{flex-wrap:nowrap;}
+  #chartCol{flex:1 1 auto;min-width:0;}
+  #obCol{flex:0 0 160px;min-width:0;}
+  #tradeCol{flex:0 0 262px;min-width:0;}
+  .bottom-row{min-height:170px;}
+}
+/* 24.6 — tablet: vertical stack, orderbook + trade below chart */
+@media (max-width:1023px) and (min-width:641px){
+  #gameUI{overflow-y:auto;}
+  main{flex-direction:column;overflow-y:auto;}
+  .top-row{flex-direction:column;min-height:0;}
+  #chartCol{height:44vh;min-height:280px;}
+  #obCol{flex:0 0 200px;height:220px;width:100%;}
+  #tradeCol{flex:0 0 auto;width:100%;}
+  .bottom-row{flex:0 0 auto;max-height:none;min-height:240px;}
+  .pos-table{font-size:11px;} th,td{padding:4px 5px;}
+}
+/* 24.6 — phone: single column, big tap targets, positions as cards, row-layout header */
+@media (max-width:640px){
+  #gameUI{overflow-y:auto;}
+  main{flex-direction:column;overflow-y:auto;}
+  header{gap:6px;padding:6px 8px;row-gap:4px;}
+  header .logo{font-size:15px;}
+  header .hsep{display:none;}
+  header .stat b{font-size:13px;}
+  header .pill{padding:3px 8px;font-size:11px;}
+  #overviewWrap{order:100;width:100%;justify-content:space-between;flex-wrap:wrap;gap:4px;}
+  .top-row{flex-direction:column;min-height:0;}
+  #chartCol{height:33vh;min-height:220px;}
+  #obCol{flex:0 0 165px;height:185px;width:100%;}
+  #tradeCol{flex:0 0 auto;width:100%;}
+  .bottom-row{flex:0 0 auto;max-height:none;min-height:240px;}
+  .tv-strip{gap:6px;font-size:10px;flex-wrap:wrap;}
+  .tabs-bottom .tab-btn{padding:8px 10px;font-size:11px;}
+  .btn-cta{padding:14px;font-size:16px;}
+  .seg button{padding:12px;font-size:16px;}
+  .btn-mini{padding:8px 12px;min-height:40px;}
+  .pos-table{font-size:10.5px;} th,td{padding:5px 4px;}
+  .pos-table thead{display:none;} /* positions read as cards on phone */
+  .pos-table td{display:block;text-align:left;border:none;padding:2px 4px;}
+  .pos-table tr{border:1px solid var(--line);border-radius:10px;background:var(--panel2);padding:6px;margin-bottom:8px;display:block;}
+  .pos-table{display:block;} .pos-table tbody{display:block;}
+}
+
+  /* mobile chart touch action */
+  #chart { touch-action: none; cursor: crosshair; }
+  @keyframes urgentGlow { 0%{ background:rgba(238,90,82,0.2);color:#ee5a52;} 100%{ background:#ee5a52;color:#fff;} }
+  .urgent-timer { animation: urgentGlow 0.7s infinite alternate; border-radius:6px; padding:0 4px; }
+  .chart-floating-tools button:hover { background: var(--accent) !important; color:#fff; }
+
+  #tpVal,#slVal{flex:1;padding:6px;border:1px solid var(--line);border-radius:8px;background:var(--panel2);color:var(--ink);font-family:inherit;font-size:13px;}
+
+  /* --- Neon Cyberpunk Green & Black Styling --- */
+  body {
+    background-color: #05070a;
+  }
+  .logo .a { 
+    color: var(--green); 
+    text-shadow: 0 0 12px rgba(0,255,102,0.7); 
+  }
+  .btn-long, .seg button.long.on, .btn-mini.t-on {
+    background: var(--green) !important;
+    color: #041407 !important;
+    font-weight: 800 !important;
+    box-shadow: 0 0 14px rgba(0, 255, 102, 0.45);
+    border-color: var(--green) !important;
+  }
+  .btn-long:hover, .seg button.long.on:hover {
+    box-shadow: 0 0 22px rgba(0, 255, 102, 0.75);
+    filter: brightness(1.1);
+  }
+  .btn-short, .seg button.short.on {
+    box-shadow: 0 0 14px rgba(255, 51, 85, 0.45);
+  }
+  .last-price.g {
+    background: var(--green) !important;
+    color: #031406 !important;
+    box-shadow: 0 0 12px rgba(0, 255, 102, 0.65);
+  }
+  .pnl-share-card {
+    background: radial-gradient(circle at 50% 10%, rgba(0,255,102,0.15), transparent 75%), linear-gradient(165deg, #0d121b 0%, #05070b 100%) !important;
+    border: 1px solid rgba(0, 255, 102, 0.35) !important;
+    box-shadow: 0 0 35px rgba(0, 255, 102, 0.25), 0 25px 60px rgba(0,0,0,0.9) !important;
+  }
+  .share-brand .a { 
+    color: var(--green) !important; 
+    text-shadow: 0 0 12px rgba(0,255,102,0.8); 
+  }
+  .share-pct.g { 
+    color: var(--green) !important; 
+    text-shadow: 0 0 25px rgba(0,255,102,0.8); 
+  }
+  #hBal { 
+    text-shadow: 0 0 10px rgba(0,255,102,0.45); 
+  }
+  .tv-strip .tv-chg.g {
+    color: var(--green);
+    text-shadow: 0 0 8px rgba(0,255,102,0.5);
+  }
+  input[type=range] { 
+    accent-color: var(--green); 
+  }
+
+
+  /* Header clean layout spacing */
+  header {
+    min-height: 52px;
+    align-items: center;
+    padding: 6px 14px;
+    background: #0d1117;
+  }
+  header .stat b {
+    font-size: 14px;
+  }
+  #overviewWrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: 4px;
+  }
+  #overview {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  #overview .ov-item {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.1;
+  }
+  #overview .ov-label {
+    font-size: 10px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  #overview .ov-val {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+  }
+  #inGameExitBtn {
+    background: rgba(255, 51, 85, 0.15) !important;
+    color: #ff3355 !important;
+    border: 1px solid rgba(255, 51, 85, 0.4) !important;
+    cursor: pointer;
+    transition: all .2s;
+  }
+  #inGameExitBtn:hover {
+    background: #ff3355 !important;
+    color: #fff !important;
+  }
+
+
+  /* --- Modern Boxy & Sharp Neon UI System --- */
+  .menu-box {
+    background: #0d1117;
+    border: 1px solid #1f2937;
+    border-top: 2px solid var(--green);
+    border-radius: 6px;
+    padding: 32px 36px;
+    width: min(440px, 94%);
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.75), 0 0 20px rgba(16, 240, 128, 0.08);
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .menu-header {
+    text-align: center;
+    border-bottom: 1px solid #1f2937;
+    padding-bottom: 14px;
+  }
+  .brand-badge {
+    font-size: 26px;
+    font-weight: 800;
+    letter-spacing: 1.5px;
+    color: var(--ink);
+  }
+  .brand-badge .bolt {
+    color: var(--green);
+    filter: drop-shadow(0 0 8px rgba(16, 240, 128, 0.8));
+  }
+  .brand-sub {
+    font-size: 11.5px;
+    color: var(--muted);
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    margin-top: 4px;
+  }
+  .menu-section {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .section-title {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--muted);
+    letter-spacing: 1px;
+  }
+  .seg-box {
+    display: flex;
+    background: #161c24;
+    border: 1px solid #1f2937;
+    border-radius: 4px;
+    padding: 2px;
+    gap: 2px;
+  }
+  .seg-btn {
+    flex: 1;
+    padding: 8px 4px;
+    border: none;
+    border-radius: 3px;
+    background: transparent;
+    color: var(--muted);
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all .15s ease;
+  }
+  .seg-btn.on {
+    background: #1f2937;
+    color: var(--green);
+    border: 1px solid rgba(16, 240, 128, 0.4);
+    box-shadow: 0 0 10px rgba(16, 240, 128, 0.2);
+  }
+  .menu-box input {
+    width: 100%;
+    padding: 10px 14px;
+    background: #161c24;
+    border: 1px solid #1f2937;
+    border-radius: 4px;
+    color: var(--ink);
+    font-family: inherit;
+    font-size: 13px;
+    letter-spacing: 0.5px;
+  }
+  .menu-box input:focus {
+    outline: none;
+    border-color: var(--green);
+    box-shadow: 0 0 8px rgba(16, 240, 128, 0.3);
+  }
+  .btn-start {
+    padding: 13px;
+    background: var(--green);
+    color: #041407;
+    border: none;
+    border-radius: 4px;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 800;
+    letter-spacing: 1px;
+    cursor: pointer;
+    box-shadow: 0 0 16px rgba(16, 240, 128, 0.35);
+    transition: all .2s;
+  }
+  .btn-start:hover {
+    box-shadow: 0 0 24px rgba(16, 240, 128, 0.6);
+    filter: brightness(1.08);
+  }
+  .menu-footer {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+  }
+  .btn-action {
+    padding: 6px 14px;
+    background: #161c24;
+    border: 1px solid #1f2937;
+    border-radius: 4px;
+    color: var(--muted);
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .btn-action:hover {
+    color: var(--ink);
+    border-color: #374151;
+  }
+  .menu-stats-bar {
+    text-align: center;
+    font-size: 11.5px;
+    color: var(--muted);
+    border-top: 1px solid #1f2937;
+    padding-top: 10px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Flush Right Price Tag in Chart */
+  .last-price {
+    right: 0px !important;
+    border-radius: 2px 0 0 2px !important;
+    padding: 2px 8px !important;
+    font-size: 11px !important;
+    font-weight: 800 !important;
+    letter-spacing: 0.5px !important;
+  }
+
+
+  /* --- Modern Boxy In-Game UI Styling --- */
+  :root {
+    --panel: #0d1117;
+    --panel2: #161c24;
+    --line: #1f2937;
+    --line-active: rgba(16, 240, 128, 0.4);
+  }
+
+  /* Sharp rectangular cards */
+  .card, .ob-card, .trade-card, .bottom-card, #chartBox {
+    border-radius: 4px !important;
+    border: 1px solid #1f2937 !important;
+    background: #0d1117 !important;
+  }
+
+  /* Sharp modern header */
+  header {
+    border-bottom: 2px solid #1f2937 !important;
+    background: #080b0f !important;
+  }
+  .hsep {
+    height: 22px;
+    background: #1f2937;
+  }
+  .pill {
+    border-radius: 3px !important;
+    font-size: 11.5px !important;
+    font-weight: 800 !important;
+    border: 1px solid #1f2937 !important;
+  }
+  .pill.warn {
+    background: #1f2937 !important;
+    color: var(--amber) !important;
+    border: 1px solid var(--amber) !important;
+  }
+
+  /* Segmented buttons: sharp box modern */
+  .seg, .tabs-bottom {
+    border-radius: 4px !important;
+    background: #161c24 !important;
+    border: 1px solid #1f2937 !important;
+    padding: 2px !important;
+  }
+  .seg button, .tabs-bottom .tab-btn {
+    border-radius: 3px !important;
+    font-size: 12px !important;
+    font-weight: 800 !important;
+    transition: all .15s ease;
+  }
+  .seg button.long.on {
+    background: #10f080 !important;
+    color: #041407 !important;
+    box-shadow: 0 0 12px rgba(16, 240, 128, 0.35) !important;
+  }
+  .seg button.short.on {
+    background: #ff3355 !important;
+    color: #fff !important;
+    box-shadow: 0 0 12px rgba(255, 51, 85, 0.35) !important;
+  }
+  .tabs-bottom .tab-btn.on {
+    background: #1f2937 !important;
+    color: #10f080 !important;
+    border: 1px solid rgba(16, 240, 128, 0.4) !important;
+  }
+
+  /* Sharp inputs & CTA buttons */
+  .amount-box input, #tpVal, #slVal, .menu-box input {
+    border-radius: 3px !important;
+    border: 1px solid #1f2937 !important;
+    background: #161c24 !important;
+  }
+  .btn-mini {
+    border-radius: 3px !important;
+    font-size: 11px !important;
+    border: 1px solid #1f2937 !important;
+  }
+  .btn-cta {
+    border-radius: 4px !important;
+    letter-spacing: 0.5px !important;
+    font-size: 14px !important;
+    font-weight: 800 !important;
+  }
+
+  /* In-game exit button */
+  #inGameExitBtn {
+    border-radius: 3px !important;
+    background: rgba(255, 51, 85, 0.15) !important;
+    color: #ff3355 !important;
+    border: 1px solid rgba(255, 51, 85, 0.5) !important;
+    cursor: pointer !important;
+  }
+  #inGameExitBtn:hover {
+    background: #ff3355 !important;
+    color: #fff !important;
+  }
+
+  /* Tables: clean tabular lines */
+  table th {
+    font-size: 10px !important;
+    letter-spacing: 1px !important;
+    color: #8b949e !important;
+    border-bottom: 1px solid #1f2937 !important;
+  }
+  table td {
+    border-bottom: 1px solid rgba(31, 41, 55, 0.5) !important;
+  }
+
+</style>
+</head>
+<body>
+<header>
+  <div class="logo"><span class="bolt">⚡</span><span class="a">FLASH</span><span class="b">FOMO</span></div>
+  <span class="hsep"></span>
+  <div class="hstat"><div class="stat">Round <b id="hRound">—</b></div></div>
+  <span class="hsep"></span>
+  <div class="hstat"><div class="stat">Timer <b id="timer">—</b></div></div>
+  <span class="hsep"></span>
+  <div class="hstat"><div class="stat">Balance <b id="hBal" style="color:var(--green)">$10,000</b></div></div>
+  <span class="hsep"></span>
+  <div class="hstat"><div class="stat">Unrealized <b id="hUpnl">$0</b></div></div>
+  <span class="hsep"></span>
+  <div class="hstat" id="overviewWrap"><div class="stat" id="overview" style="display:flex;gap:10px;align-items:center;"></div></div>
+  <div class="spacer"></div>
+  <button class="btn-mini" id="soundBtn" title="Sound Volume">🔊</button>
+  <div class="sound-pop" id="soundPop">
+    <div style="font-size:11px;color:var(--muted);margin-bottom:6px">Sound Volume</div>
+    <input type="range" id="volRange" min="0" max="1" step="0.05" value="0.18">
+  </div>
+  <span class="pill" id="rankPill">🏆 —</span>
+  <span class="pill warn" id="roundPill">Ready</span>
+  <button class="btn-mini btn-danger" id="inGameExitBtn" title="Exit to Menu" style="display:flex;align-items:center;gap:4px;padding:4px 10px;font-size:12px;font-weight:700;margin-left:4px;">🚪 Exit</button>
+</header>
+
+<main id="gameUI" style="display:none">
+  <!-- BARIS ATAS: Chart | Orderbook | Trade Box -->
+  <div class="top-row">
+    <div id="chartCol">
+      <div id="chartBox"><canvas id="chart"></canvas><div class="chart-floating-tools" style="position:absolute;bottom:8px;right:8px;z-index:7;display:flex;gap:4px;background:rgba(15,20,30,0.75);backdrop-filter:blur(6px);padding:3px 6px;border-radius:8px;border:1px solid var(--line);"><button id="chartZoomIn" class="btn-mini" style="padding:2px 7px;font-size:12px;font-weight:800;" title="Zoom In Candle">+</button><button id="chartZoomOut" class="btn-mini" style="padding:2px 7px;font-size:12px;font-weight:800;" title="Zoom Out Candle">-</button><button id="chartReset" class="btn-mini" style="padding:2px 8px;font-size:11px;" title="Reset Posisi Chart">⟲ Reset</button></div>
+        <div class="tv-strip" id="tvStrip">
+          <span class="tv-sym" id="tvSym">FOMO/USDT</span>
+          <span id="tvO">O —</span><span id="tvH">H —</span><span id="tvL">L —</span><span id="tvC">C —</span>
+          <span id="tvChg">+0.0%</span>
+        </div>
+        <div class="chartctl">
+          <button class="btn-mini" data-tf="1">1s</button>
+          <button class="btn-mini" data-tf="5">5s</button>
+          <button class="btn-mini t-on" data-tf="15">15s</button>
+          <button class="btn-mini t-on" id="linesToggle">MyLines:ON</button>
+          <button class="btn-mini" id="volToggle">VOL:ON</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="obCol">
+      <div class="card ob-card">
+        <div class="ob-header"><span>ORDERBOOK</span><span class="mute" id="obSym">FOMO</span></div>
+        <div id="newsTicker">📰 …</div>
+        <div id="obBody"></div>
+      </div>
+    </div>
+
+    <div id="tradeCol">
+      <div class="card trade-card">
+        <div class="trade-header"><h4>Trade · <span id="tSym">FOMO</span> @ <b id="mkt">—</b></h4></div>
+        <div class="seg">
+          <button id="bLong" class="long on">Long ▲</button>
+          <button id="bShort" class="short">Short ▼</button>
+        </div>
+        <div class="row-compact">
+          <span class="lfield">Lev: <b id="levVal" style="color:var(--ink);font-size:13px">5x</b></span>
+          <div class="chips-row">
+            <button class="btn-mini" data-preset-lev="2">2×</button>
+            <button class="btn-mini" data-preset-lev="5">5×</button>
+            <button class="btn-mini" data-preset-lev="10">10×</button>
+            <button class="btn-mini" data-preset-lev="25">25×</button>
+          </div>
+        </div>
+        <input type="range" id="lev" min="1" max="25" value="5">
+        <div class="row-compact">
+          <span class="lfield">Margin (USD)</span>
+          <div class="chips-row">
+            <button class="btn-mini" data-preset-amt="0.25">25%</button>
+            <button class="btn-mini" data-preset-amt="0.5">50%</button>
+            <button class="btn-mini" data-preset-amt="99">Max</button>
+          </div>
+        </div>
+        <div class="amount-box"><input type="number" id="amount" value="500" min="10"><span class="usd">USD</span></div>
+        <div class="clr-sub" id="clrPct">Notional $0</div>
+        <div class="row-compact" id="estLiqBox" style="font-size:11px;color:var(--muted);background:var(--panel2);padding:5px 8px;border-radius:8px;margin-top:6px;"><span>Est. Liq Price: <b id="estLiqPrice" style="color:#f39c12">--</b></span><span id="riskBadge" style="font-weight:800;padding:2px 6px;border-radius:4px;background:rgba(22,163,94,0.2);color:var(--green)">LOW RISK</span></div><div class="limit-row" style="margin-top:6px;"><button type="button" id="tpslToggle" class="btn-mini">TP / SL ⛊</button><div class="hidden" id="tpslWrap" style="display:flex;gap:5px;flex:1;"><input type="number" id="tpVal" placeholder="TP ($)" style="width:50%;padding:5px;border:1px solid var(--line);border-radius:6px;background:var(--panel2);color:var(--ink);font-size:11px;"><input type="number" id="slVal" placeholder="SL ($)" style="width:50%;padding:5px;border:1px solid var(--line);border-radius:6px;background:var(--panel2);color:var(--ink);font-size:11px;"></div></div>
+        <div class="limit-row">
+          <button id="limitToggle" class="btn-mini">Limit ⏳</button>
+          <div class="amount-box hidden" id="limitWrap" style="flex:1"><input type="number" id="limitVal" placeholder="Limit price"><span class="usd">USD</span></div>
+        </div>
+        <button class="btn-cta btn-long" id="buyBtn">Open Long</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- BARIS BAWAH: tab data panel -->
+  <div class="bottom-row">
+    <div class="card bottom-card">
+      <div class="bottom-tabs-header">
+        <div class="seg tabs-bottom">
+          <button class="tab-btn on" data-btab="pos">My Positions (<span id="posCountBadge">0</span>)</button>
+          <button class="tab-btn" data-btab="history">Trade History</button>
+          <button class="tab-btn" data-btab="leaderboard">Leaderboard</button>
+          <button class="tab-btn" data-btab="botact">User Activity</button>
+          <button class="tab-btn" data-btab="rounds">Rounds Recap</button>
+        </div>
+        <div class="tab-actions">
+          <button class="btn-mini btn-danger" id="closeAll">✕ Close All Positions</button>
+        </div>
+      </div>
+
+      <div id="btab-pos" class="tab-content on">
+        <div class="table-wrap">
+          <table class="pos-table">
+            <thead><tr>
+              <th>Side</th><th>Lev</th><th>Entry</th><th>Mark</th><th>Liq Price</th>
+              <th>Size</th><th>Margin</th><th>PnL (ROE%)</th><th>Action</th>
+            </tr></thead>
+            <tbody id="posTableBody"></tbody>
+          </table>
+          <div id="posEmpty" class="mute-empty">No active position. Open one above!</div>
+        </div>
+        <!-- 24.5 — pending limit orders box -->
+        <div class="pending-box" id="pendingBox" style="display:none;margin-top:8px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+            <b style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--muted)">⏳ Pending Limit Orders</b>
+          </div>
+          <div id="pendingList"></div>
+        </div>
+      </div>
+
+      <div id="btab-history" class="tab-content" style="display:none">
+        <div id="histSum" class="hist-sum"></div>
+        <div class="table-wrap">
+          <table class="pos-table" style="width:100%">
+            <thead><tr>
+              <th style="text-align:left">Side</th>
+              <th style="text-align:left">Entry → Exit</th>
+              <th style="text-align:right">Realised PnL</th>
+              <th style="text-align:center">Exit Type</th>
+              <th style="text-align:right">Action</th>
+            </tr></thead>
+            <tbody id="histTableBody"></tbody>
+          </table>
+          <div id="histEmpty" class="mute-empty" style="display:none">Your realised trades will appear here.</div>
+        </div>
+      </div>
+
+      <div id="btab-leaderboard" class="tab-content" style="display:none">
+        <div class="table-wrap"><table><thead><tr><th>#</th><th>Trader</th><th>Equity</th><th>Mode</th></tr></thead><tbody id="boardBody"></tbody></table></div>
+      </div>
+
+      <div id="btab-botact" class="tab-content" style="display:none"><div id="botAct" class="scrollable-tab-list"></div></div>
+
+      <div id="btab-rounds" class="tab-content" style="display:none"><div id="roundsList" class="scrollable-tab-list"></div></div>
+    </div>
+  </div>
+</main>
+
+<!-- round intro overlay -->
+<div id="roundIntro"><div class="round-box" id="roundIntroBox"></div></div>
+<!-- modal (result of round / game over / win) -->
+<div id="board"><div class="card-big" id="modalCard"></div></div>
+<div id="flash"></div>
+
+<!-- 19.4 — PnL share card modal -->
+<div id="pnlShareModal">
+  <div class="pnl-share-card">
+    <div class="watermark">FLASH FOMO</div>
+    <div class="share-brand"><span class="a">⚡FLASH</span> <span class="b">FOMO</span></div>
+    <div id="sharePnlPct" class="share-pct g">+42.5%</div>
+    <div class="share-tag" id="shareSub">realised PnL</div>
+    <div class="share-details">
+      <div class="share-row"><span>Symbol</span><b id="shareSym">FOMO/USDT</b></div>
+      <div class="share-row"><span>Side</span><b id="shareSide">LONG 10x</b></div>
+      <div class="share-row"><span>Entry → Exit</span><b id="sharePrices">—</b></div>
+      <div class="share-row"><span>Profit</span><b id="shareAmt">—</b></div>
+      <div class="share-row"><span>Trader</span><b id="shareTrader">YOU</b></div>
+    </div>
+    <div class="share-actions">
+      <button class="btn-mini" id="copyShareBtn">📋 Copy Info</button>
+      <button class="btn-mini" id="closeShareModal">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- menu -->
+<div class="full hidden" id="menu">
+  <div class="menu-box">
+    <div class="menu-header">
+      <div class="brand-badge"><span class="bolt">⚡</span> FLASH FOMO</div>
+      <div class="brand-sub">Synthetic Futures Trading Tournament</div>
+    </div>
+    
+    <div class="menu-section">
+      <div class="section-title">MARKET PAIR</div>
+      <div class="seg-box">
+        <button class="seg-btn on" data-sym="FOMO">FOMO / USDT</button>
+        <button class="seg-btn" data-sym="MINT">MINT / USDT</button>
+        <button class="seg-btn" data-sym="LUNAR">LUNAR / USDT</button>
+      </div>
+    </div>
+
+    <div class="menu-section">
+      <div class="section-title">DIFFICULTY & SPEED</div>
+      <div class="seg-box">
+        <button class="seg-btn" data-mode="EASY">EASY</button>
+        <button class="seg-btn on" data-mode="NORMAL">NORMAL</button>
+        <button class="seg-btn" data-mode="HARD">HARD</button>
+      </div>
+    </div>
+
+    <div class="menu-section">
+      <div class="section-title">TRADER CALLSIGN</div>
+      <input id="nameInput" maxlength="16" placeholder="ENTER TRADER NAME..." spellcheck="false" autocomplete="off">
+    </div>
+
+    <button class="btn-start" id="playBtn">▶ ENTER TOURNAMENT</button>
+
+    <div class="menu-footer">
+      <button class="btn-action" id="themeBtn">◐ TOGGLE THEME</button>
+    </div>
+
+    <div class="menu-stats-bar" id="menuStats"></div>
+  </div>
+</div>
+<!-- loading -->
+<div class="full" id="loading">
+  <div class="loading">
+    <div class="big-emoji">⚡</div>
+    <h1 style="font-size:30px;color:var(--ink)">Loading engine…</h1>
+    <div class="bar"><div class="fill" id="loadFill"></div></div>
+  </div>
+</div>
+
+<div id="exitModal" style="position:fixed;inset:0;z-index:99999;background:rgba(5,8,14,0.75);display:none;align-items:center;justify-content:center;backdrop-filter:blur(5px);">
+  <div style="background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:24px 28px;max-width:380px;width:92%;text-align:center;box-shadow:0 24px 70px rgba(0,0,0,0.55);color:var(--ink);">
+    <h3 style="font-size:18px;margin-bottom:10px;color:var(--red);">🚪 Exit Game to Menu?</h3>
+    <p style="font-size:13px;color:var(--muted);line-height:1.5;margin-bottom:16px;">This will forfeit your current round, close any open positions, and return you to the main menu. Are you sure?</p>
+    <div style="display:flex;gap:10px;justify-content:center;">
+      <button id="cancelExitBtn" class="btn-mini" style="padding:8px 16px;cursor:pointer;">Cancel</button>
+      <button id="confirmExitBtn" class="btn-mini btn-danger" style="padding:8px 16px;cursor:pointer;">Yes, Exit</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/core.js"></script>
+<script src="js/app.js"></script>
+
+<!-- Rules Modal -->
+
+<!-- Exit Modal -->
+</body>
+</html>

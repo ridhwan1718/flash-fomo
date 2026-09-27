@@ -1,0 +1,9 @@
+{
+  "name": "flash-fomo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Flash FOMO — fast synthetic futures trading battle (paper demo game)",
+  "scripts": {
+    "test": "node --test test/core.test.js"
+  }
+}
