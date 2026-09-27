@@ -131,6 +131,9 @@ function pickRegime(){
   if(r<0.55){ kind='trend'; dir=Math.random()<0.6?1:-1; drift=dir*R(0.0006,0.0016)*P.vol; vol=P.vol; }
   else if(r<0.75){ kind='burst'; burstUntil=performance.now()+22000; const bVol=P.burstVol!=null?P.burstVol:1.9; vol=bVol; }
   else { kind='range'; center=state.mark; vol=P.vol; }
+  // 34.4 — wave phase per session: seed so pump/dump pattern differs each run
+  state._waveSeed = state._waveSeed==null ? Math.random()*Math.PI*2 : state._waveSeed + R(0.6, 2.4);
+  state._waveT = state._waveT || 0;
   state.regime={ kind, drift, vol, dir, center, burstUntil, refMark:state.mark };
   state.regimeLabel = kind==='trend' ? (dir>0?'TRENDING UP':'TRENDING DOWN') : (kind==='burst'?'VOLATILITY BURST':'RANGING');
   news(kind==='trend' ? (dir>0?'📰 breakout zone — shorts squeezed':'📰 consolidation — longs trapped')
@@ -139,76 +142,77 @@ function pickRegime(){
 }
 function news(msg){ state.newsLog = msg; }
 
+/* 34.4 — healthy price curve: multi-frequency sine (pump, dump, correction) +
+   mean reversion + regime drift + capped news impulse. No hard clamp, no snap. */
 function marketTick(){
   const reg = state.regime;
   const now = performance.now();
   const P = MODES[state.mode] || MODES.NORMAL;
 
-  // Range center tracks mark price smoothly
-  reg.center = state.mark * 0.998 + (reg.center || state.mark) * 0.002;
   const coinVol = symbolVolOf(state.symbol);
   const noiseBase = P.noise != null ? P.noise : 0.00015;
   const vol = (reg.vol || 1) * (P.vol || 1) * coinVol;
 
+  // Advance wave clock (slow pump/dump cycles). Period set so ~3 visible waves
+  // per round: roundMS ≈ 90s at TICK=100ms → 900 ticks, phase step = 2π*waves / 900.
+  const roundTicks = Math.max(50, Math.round((P.roundMS || 90000) / 100));
+  const waves = 3;                       // pump+dump+correction cycles per round
+  state._waveT += (Math.PI*2*waves)/roundTicks;
+
   let impulse = 0;
+  // Primary wave (the pump/dump body) — sine, bounded by coinVol
+  const amp = 0.0016 * vol;
+  impulse += Math.sin(state._waveT + state._waveSeed) * amp;
+  // Secondary wave (correction ripple, faster + phase-shifted)
+  impulse += Math.sin(state._waveT*2.3 + state._waveSeed*1.7 + 1.1) * (amp*0.35);
+  // Micro tertiary (tick wobble)
+  impulse += R(-noiseBase, noiseBase) * (0.6*vol + 0.4);
+  // Range pull-to-center (only mild — don't flatten the waves)
   if(reg.kind === 'range'){
-    const diff = state.mark - reg.center;
-    // Mean reversion + micro jitter
-    impulse = -diff * 0.0035 + R(-noiseBase, noiseBase);
+    reg.center = state.mark*0.99 + reg.center*0.01;
+    impulse += -(state.mark - reg.center)/reg.center * 0.0006;
   } else {
-    impulse = (reg.drift * P.vol) * vol + R(-noiseBase, noiseBase) * vol;
-    if(now < reg.burstUntil){ impulse *= 1.5; }
+    // trend drift + burst amplification; regime reversal slows the wave
+    impulse += (reg.drift||0) * P.vol * 0.8;
+    if(now < reg.burstUntil){ impulse *= 1.35; }
     if(Math.random() < P.revP){
       reg.dir *= -1; reg.drift = -reg.drift;
       news(reg.dir > 0 ? '📰 momentum flip — buyers in control' : '📰 momentum flip — sellers in control');
     }
   }
 
-  // Active micro-jitter ensuring price never stops / freezes
-  const microStep = (Math.random() - 0.495) * noiseBase * 0.8;
-  impulse += microStep;
-
-  // Auto-regressive smoothing with live response
-  state.velocity = (state.velocity * 0.84) + (impulse * 0.16);
-
-  // Guarantee minimum tick movement so price never stays completely flat
-  if(Math.abs(state.velocity) < 0.00002){
-    state.velocity += (Math.random() < 0.5 ? 1 : -1) * 0.00003;
+  // News impulse: converted into velocity over ~5s (50 ticks) — smooth, never a step
+  if(state.newsImpulse && state.newsImpulse.ticks > 0){
+    state.newsImpulse.ticks--;
+    impulse += (state.newsImpulse.per / 50) * (P.vol||1);
+  } else if(Math.random() < P.newsP && !state.newsImpulse){
+    const dir = Math.random() < 0.5 ? 1 : -1;
+    const maxPump = P.pumpMax != null ? P.pumpMax : 0.014;
+    const total = R(maxPump*0.35, maxPump) * dir;
+    state.newsImpulse = { per: total, ticks: 50 };
+    news(dir > 0 ? '📰 ' + state.symbol + ' ETF approved +' + (total*100).toFixed(1) + '%'
+                 : '📉 ' + state.symbol + ' exchange hack ' + (total*100).toFixed(1) + '%');
   }
+  if(state.newsImpulse && state.newsImpulse.ticks <= 0) state.newsImpulse = null;
 
-  // Clamp velocity � difficulty-aware (EASY: gentle, HARD: wilder but still realistic)
-  const velMax = P.velMax != null ? P.velMax : 0.0018;
+  // AR smoothing (inertia) — price follows impulse with momentum
+  state.velocity = state.velocity*0.86 + impulse*0.14;
+
+  // Cap per-tick velocity: no single-tick jump > ~0.45% (HARD: wilder)
+  const velMax = (P.velMax != null ? P.velMax : 0.0018) * 1.6; // allow the 3-4% wave peak
   state.velocity = Math.max(-velMax, Math.min(velMax, state.velocity));
   state.prevMark = state.mark;
   state.mark = Math.max(2, state.mark * (1 + state.velocity));
 
-  // Dynamic band clamp centered on regime reference
+  // 34.4 — no band clamp. Instead a very slow mean-reversion to regime ref prevents
+  // long-term runaway, but allows 10-15% pump/dump excursions within a round.
   const ref = reg.refMark || state.mark;
-  if(state.mark > ref * 1.14){
-    state.velocity = -Math.abs(state.velocity) * 0.8;
-    state.mark = ref * 1.14;
-    reg.refMark = state.mark; // shift ref so it never gets stuck at ceiling
-  } else if(state.mark < ref * 0.86){
-    state.velocity = Math.abs(state.velocity) * 0.8;
-    state.mark = ref * 0.86;
-    reg.refMark = state.mark; // shift ref so it never gets stuck at floor
+  const dev = (state.mark - ref) / ref;
+  if(Math.abs(dev) > 0.09){
+    reg.refMark = ref * 1 + (state.mark - ref) * 0.25;   // ref glides 25% toward price
   }
-
-  // News impulses (smooth 1.4s progression)
-  if(state.newsImpulse && state.newsImpulse.ticks > 0){
-    state.newsImpulse.ticks--;
-    state.mark = Math.max(2, state.mark * (1 + state.newsImpulse.per / 14));
-    state.prevMark = state.mark;
-  } else if(Math.random() < P.newsP && !state.newsImpulse){
-    const dir = Math.random() < 0.5 ? 1 : -1;
-      // Difficulty-scaled pump: EASY small, HARD bigger but still realistic
-      const maxPump = P.pumpMax != null ? P.pumpMax : 0.014;
-      const minPump = maxPump * 0.35;
-      const total = R(minPump, maxPump) * dir;
-    state.newsImpulse = { per: total, ticks: 14 };
-    news(dir > 0 ? '📰 ' + state.symbol + ' ETF approved +' + (total * 100).toFixed(1) + '%' : '📉 ' + state.symbol + ' exchange hack ' + (total * 100).toFixed(1) + '%');
-  }
-  if(state.newsImpulse && state.newsImpulse.ticks <= 0) state.newsImpulse = null;
+  // slow drift-anchored reversion (doesn't cancel the wave, just anchors the long run)
+  state.velocity -= (state.mark - ref)/ref * 0.0004;
 
   // Candle creation and updates
   const candleSec = P.candleSec != null ? P.candleSec : CANDLE_SEC;
