@@ -645,10 +645,6 @@ body{position:relative;}
         <div class="amount-box"><input type="number" id="amount" value="500" min="10"><span class="usd">USD</span></div>
         <div class="clr-sub" id="clrPct">Notional $0</div>
         <div class="row-compact" id="estLiqBox" style="font-size:11px;color:var(--muted);background:var(--panel2);padding:5px 8px;border-radius:8px;margin-top:6px;"><span>Est. Liq Price: <b id="estLiqPrice" style="color:#f39c12">--</b></span><span id="riskBadge" style="font-weight:800;padding:2px 6px;border-radius:4px;background:rgba(22,163,94,0.2);color:var(--green)">LOW RISK</span></div><div class="limit-row" style="margin-top:6px;"><button type="button" id="tpslToggle" class="btn-mini">TP / SL ⛊</button><div class="hidden" id="tpslWrap" style="display:flex;gap:5px;flex:1;"><input type="number" id="tpVal" placeholder="TP ($)" style="width:50%;padding:5px;border:1px solid var(--line);border-radius:6px;background:var(--panel2);color:var(--ink);font-size:11px;"><input type="number" id="slVal" placeholder="SL ($)" style="width:50%;padding:5px;border:1px solid var(--line);border-radius:6px;background:var(--panel2);color:var(--ink);font-size:11px;"></div></div>
-        <div class="limit-row">
-          <button id="limitToggle" class="btn-mini">Limit ⏳</button>
-          <div class="amount-box hidden" id="limitWrap" style="flex:1"><input type="number" id="limitVal" placeholder="Limit price"><span class="usd">USD</span></div>
-        </div>
         <button class="btn-cta btn-long" id="buyBtn">Open Long</button>
       </div>
     </div>
@@ -680,13 +676,6 @@ body{position:relative;}
             <tbody id="posTableBody"></tbody>
           </table>
           <div id="posEmpty" class="mute-empty">No active position. Open one above!</div>
-        </div>
-        <!-- 24.5 — pending limit orders box -->
-        <div class="pending-box" id="pendingBox" style="display:none;margin-top:8px">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-            <b style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--muted)">⏳ Pending Limit Orders</b>
-          </div>
-          <div id="pendingList"></div>
         </div>
       </div>
 

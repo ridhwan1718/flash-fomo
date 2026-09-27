@@ -531,21 +531,6 @@ function renderOB(){
   for(var w=0;w<cx.length;w++){ (function(k){ cx[w].onclick=function(){ cancelPending(k); }; })(parseInt(cx[w].getAttribute('data-cx'),10)); }
 }
 function cancelPending(k){ var p=S.book.filter(function(b){return b.pending&&b.isPlayer;})[k]; if(!p)return; S.book=S.book.filter(function(b){return b!==p;}); flash('Limit order cancelled'); renderAll(); }
-/* 24.5 — pending limit orders box (rendered under positions tab) */
-function renderPendingLimits(){
-  var p=el.pendingList, box=el.pendingBox; if(!p || !box) return;
-  var pend=S.book.filter(function(b){return b.pending&&b.isPlayer;});
-  if(!pend.length){ box.style.display='none'; return; }
-  box.style.display='block';
-  var html='';
-  pend.forEach(function(o,i){ var inTheMo= (o.side==='long' && S.mark>=o.price)||(o.side==='short'&&S.mark<=o.price);
-    html+='<div class="pending-row"><span style="color:var(--accent)">'+(o.side==='long'?'BUY':'SELL')+' '+fmtF(o.price)+'</span>'+
-      '<span>'+fmtK(o.notional)+(inTheMo?' · <span class="g">fills ⏳</span>':'')+'</span>'+
-      '<button class="btn-mini" data-pcancel="'+i+'" style="font-size:10px">✕ Cancel</button></div>'; });
-  p.innerHTML=html;
-  var btns=p.querySelectorAll('[data-pcancel]');
-  for(var w=0;w<btns.length;w++){ (function(i){ btns[w].onclick=function(){ cancelPending(i); }; })(parseInt(btns[w].getAttribute('data-pcancel'),10)); }
-}
 function renderBoard(){
   var list=S.part.slice().sort(function(a,b){return (b.alive?1:0)-(a.alive?1:0)||b.equity-a.equity;});
   var html='';
@@ -865,7 +850,6 @@ function renderAll(){
     renderHeader();
     renderPos();
     renderOB();
-    renderPendingLimits();
     renderTV();
     // Only re-render tab lists when that specific tab is active
     var curTab = document.querySelector('[data-btab].on');
@@ -886,7 +870,7 @@ function setTradeSide(side){ tradeSide=side; if(el.bLong)el.bLong.classList.togg
 function buyColor(){ el.buyBtn.className='btn-cta '+(tradeSide==='long'?'btn-long':'btn-short'); el.buyBtn.textContent='Open '+(tradeSide==='long'?'Long':'Short'); }
 if(el.bLong)el.bLong.onclick=function(){ setTradeSide('long'); };
 if(el.bShort)el.bShort.onclick=function(){ setTradeSide('short'); };
-if(el.limitToggle)el.limitToggle.onclick=function(){ el.limitToggle.classList.toggle('on'); if(el.limitWrap)el.limitWrap.classList.toggle('hidden'); };
+if(el.limitToggle)el.limitToggle.onclick=function(){ el.limitToggle.classList.toggle('on'); if(el.limitWrap)el.limitWrap.classList.toggle('hidden'); }; // 34.2 — limit UI removed, keep wiring safe if elements reappear
 
 // 30.1 & 32.1 — Floating Chart Controls
 if(el.chartZoomIn) el.chartZoomIn.onclick = function(){ chartState.zoom = Math.min(3.5, chartState.zoom * 1.25); drawChart(); };
@@ -1025,22 +1009,12 @@ if(el.buyBtn)el.buyBtn.onclick=function(){
   var lev=+el.lev.value, amount=+el.amount.value||0;
   if(amount<10){ flash('Amount min $10','r'); return; }
   var player=me();
-  var isLimit= el.limitToggle && el.limitToggle.classList.contains('on');
-  var limV= el.limitVal? el.limitVal.value:'';
   var res;
-  if(isLimit && limV!=='' && +limV>0){
-    var tp_v=(el.tpVal&&el.tpVal.value)?parseFloat(el.tpVal.value):null;
-    var sl_v=(el.slVal&&el.slVal.value)?parseFloat(el.slVal.value):null;
-    res=C.openPosition(player,tradeSide,amount*lev,lev,tp_v,sl_v,true,+limV);
-    if(res.ok){ flash((tradeSide==='long'?'BUY':'SELL')+' LIMIT '+fmtF(+limV)+' · '+fmtK(amount*lev)); beep(640,.08); }
-    else flash(res.msg,'r');
-  } else {
-    var tp_v=(el.tpVal&&el.tpVal.value)?parseFloat(el.tpVal.value):null;
-    var sl_v=(el.slVal&&el.slVal.value)?parseFloat(el.slVal.value):null;
-    res=C.openPosition(player,tradeSide,amount*lev,lev,tp_v,sl_v);
-    if(res.ok){ flash((tradeSide==='long'?'LONG':'SHORT')+' '+fmtK(amount*lev)+' @ '+fmtF(S.mark)); beep(880,.07); }
-    else { flash(res.msg,'r'); beep(200,.16); }
-  }
+  var tp_v=(el.tpVal&&el.tpVal.value)?parseFloat(el.tpVal.value):null;
+  var sl_v=(el.slVal&&el.slVal.value)?parseFloat(el.slVal.value):null;
+  res=C.openPosition(player,tradeSide,amount*lev,lev,tp_v,sl_v);
+  if(res.ok){ flash((tradeSide==='long'?'LONG':'SHORT')+' '+fmtK(amount*lev)+' @ '+fmtF(S.mark)); beep(880,.07); }
+  else { flash(res.msg,'r'); beep(200,.16); }
   renderAll();
 };
 if(el.closeAll)el.closeAll.onclick=function(){ closeAll(); };
