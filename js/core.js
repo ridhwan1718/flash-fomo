@@ -65,6 +65,8 @@ function fmtCoin(n, sym){
   return n.toLocaleString('en-US',{ minimumFractionDigits:dec, maximumFractionDigits:dec });
 }
 function basePriceOf(sym){ sym=sym||state.symbol; const c=COINS[sym]||COINS.FOMO; return R(c.minBase, c.maxBase); }
+// price floor scaled to the coin (a fixed $2 floor would pin sub-$2 coins like LUNAR)
+function minPriceOf(sym){ sym=sym||state.symbol; const c=COINS[sym]||COINS.FOMO; return c.minBase*0.05; }
 const symbolVolOf = (sym)=> (COINS[sym]&&COINS[sym].vol)!=null ? COINS[sym].vol : (state.symbolVol[sym]||1);
 
 /* ------------------------------------------------------------------
@@ -202,7 +204,7 @@ function marketTick(){
   const velMax = (P.velMax != null ? P.velMax : 0.0018) * 1.6; // allow the 3-4% wave peak
   state.velocity = Math.max(-velMax, Math.min(velMax, state.velocity));
   state.prevMark = state.mark;
-  state.mark = Math.max(2, state.mark * (1 + state.velocity));
+  state.mark = Math.max(minPriceOf(state.symbol), state.mark * (1 + state.velocity));
 
   // 34.4 — no band clamp. Instead a very slow mean-reversion to regime ref prevents
   // long-term runaway, but allows 10-15% pump/dump excursions within a round.
