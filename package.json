@@ -4,6 +4,6 @@
   "private": true,
   "description": "Flash FOMO — fast synthetic futures trading battle (paper demo game)",
   "scripts": {
-    "test": "node --test test/core.test.js"
+    "test": "node --test test/*.test.js"
   }
 }

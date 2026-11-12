@@ -52,3 +52,29 @@ if (maxTickPct > 2) {
   process.exit(1);
 }
 console.log('PASS: healthy price curve (visible waves, no single-tick sharp snap)');
+
+// Every coin/mode, using the app's real start flow (resetGame → seedHistory → ticks).
+// LUNAR's base ($1.1–2.8) sits below the old fixed $2 floor, which snapped it up to $2 in one tick.
+for (const mode of Object.keys(C.MODES)) {
+  for (const sym of Object.keys(C.COINS)) {
+    for (let run = 0; run < 10; run++) {
+      const c2 = { performance: { now: () => 0 } };
+      c2.window = c2;
+      new vm.Script(src, { filename: 'core.js' }).runInContext(vm.createContext(c2));
+      const K = c2.window.CORE, KS = K.state;
+      KS.mode = mode; KS.symbol = sym;
+      K.buildParts(); K.resetGame(); K.seedHistory(150);
+      let p = KS.mark, worst = 0;
+      for (let i = 0; i < 300; i++) {
+        K.marketTick(); K.stepParticipants();
+        worst = Math.max(worst, Math.abs((KS.mark - p) / p) * 100);
+        p = KS.mark;
+      }
+      if (worst > 2) {
+        console.error(`FAIL: ${mode} ${sym} single tick jumped ${worst.toFixed(2)}%`);
+        process.exit(1);
+      }
+    }
+  }
+}
+console.log('PASS: no single-tick snap on any coin/mode');
